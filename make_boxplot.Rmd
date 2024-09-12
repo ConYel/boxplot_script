@@ -1,0 +1,149 @@
+---
+title: "make_boxplot_patients"
+author: 
+- "ConYel Konstantinos Geles"
+date: "Wed Sep 11  2024, Last Update: Wed Sep 11  2024 `r format(Sys.Date(), '%a %b %d %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    df_print: paged
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+  html_notebook: null
+---
+<!-- # author: Konstantinos Geles -->
+<!-- # <Script to make boxplots from patient data> -->
+<!-- #     Copyright (C) <2024->  <Konstantinos Geles> -->
+<!-- # -->
+<!-- #     This program is free software: you can redistribute it and/or modify -->
+<!-- #     it under the terms of the GNU Affero General Public License as -->
+<!-- #     published by the Free Software Foundation, either version 3 of the -->
+<!-- #     License, or (at your option) any later version. -->
+<!-- # -->
+<!-- #     This program is distributed in the hope that it will be useful, -->
+<!-- #     but WITHOUT ANY WARRANTY; without even the implied warranty of -->
+<!-- #     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the -->
+<!-- #     GNU Affero General Public License for more details. -->
+<!-- # -->
+<!-- #     You should have received a copy of the GNU Affero General Public License -->
+<!-- #     along with this program.  If not, see <https://www.gnu.org/licenses/>. -->
+
+
+# Global libraries 
+
+load libraries
+```{r setup libraries, include=FALSE}
+library(here)
+library(dplyr)
+library(tibble)
+library(stringr)
+library(forcats)
+library(purrr)
+library(rlang)
+library(tidyr)
+library(vroom)
+library(ggplot2)
+```
+
+# import the data
+```{r get data}
+dr_data <- vroom(file = "./ConectAMLmtt040924filt_temp.tsv") %>%
+    dplyr::select(
+        sample = IDconect,
+        ends_with(c("BOTTOM", "AUC", "LOGIC50"))
+    ) %>%
+    mutate(sample = str_c("s_", sample)) %>%
+    pivot_longer(cols = -sample, names_to = c("drug", "stat"), names_sep = "_") %>%
+    mutate(stat = ifelse(stat == "LOGIC50", "LogIC50", stat))
+```
+
+# themes
+```{r}
+size_p <- 12
+pub_theme_facet <- list(
+    theme(
+        title = element_text(size = size_p, colour = "black", face = "bold"),
+        legend.title = element_text(size = size_p, colour = "black", face = "bold"),
+        legend.text = element_text(size = size_p, colour = "black", face = "bold"),
+        strip.background = element_rect(fill = "white"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text.x = element_text(
+            angle = 45, hjust = 1, vjust = 1, size = size_p,
+            colour = "black", face = "bold"
+        ),
+        axis.text.y = element_text(size = size_p, colour = "black", face = "bold"),
+        axis.title = element_text(size = size_p, colour = "black", face = "bold"),
+        strip.text = element_text(size = size_p, colour = "black", face = "bold"),
+    )
+)
+```
+
+# make boxplot
+```{r gen boxplot}
+ssample <- "s_001-0004"
+
+dr_pd <- dr_data %>%
+    # filter(stat == sstat) %>%
+    filter(!is.na(value)) %>%
+    add_count(drug, stat) %>%
+    group_by(stat) %>%
+    mutate(
+        mmaz = max(value),
+        mmaz = case_when(
+            mmaz > 300 ~ (mmaz + 50),
+            between(mmaz, left = 30, 99) ~ (mmaz + 5),
+            .default = (mmaz + 1)
+        )
+    ) %>%
+    filter(n > 2)
+
+box_plot <- ggplot(dr_pd, aes(drug, value)) +
+    geom_violin(scale = "count") +
+    geom_boxplot(width = 0.1, outlier.size = 1, outlier.shape = 20) +
+    geom_point(
+        data = filter(dr_data, sample == ssample),
+        aes(drug, value),
+        size = 4,
+        shape = 8,
+        color = "red",
+    ) +
+    labs(title = ssample) +
+    geom_text(size = 3, aes(x = drug, mmaz, label = n)) +
+    facet_wrap("stat", ncol = 1, scales = "free") +
+    # stat_summary(fun = median.quartile, geom = "line") +
+    theme_bw() +
+    pub_theme_facet
+
+ggsave(box_plot,
+    filename = here(str_glue("violin_{ssample}.png")),
+    device = "png",
+    units = "in",
+    width = 10,
+    height = 20,
+    dpi = 300
+)
+box_plot_m <- map(unique(dr_data$sample), ~ ggplot(dr_pd, aes(drug, value)) +
+    geom_violin(scale = "count") +
+    geom_boxplot(width = 0.1, outlier.size = 1, outlier.shape = 20) +
+    geom_point(
+        data = filter(dr_data, sample == ssample),
+        aes(drug, value),
+        size = 4,
+        shape = 8,
+        color = "red",
+    ) +
+    labs(title = str_c("sample: ", .x)) +
+    geom_text(size = 3, aes(x = drug, mmaz, label = n)) +
+    facet_wrap("stat", ncol = 1, scales = "free") +
+    # stat_summary(fun = median.quartile, geom = "line") +
+    theme_bw() +
+    pub_theme_facet)
+
+pdf(file = here("violin_plots.pdf"), width = 16, height = 10)
+box_plot_m
+dev.off()
+```
+
