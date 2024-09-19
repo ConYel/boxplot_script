@@ -36,6 +36,7 @@ output:
 load libraries
 ```{r setup libraries, include=FALSE}
 library(santoku)
+library(openxlsx)
 library(here)
 library(dplyr)
 library(tibble)
@@ -57,6 +58,7 @@ quantile_df <- function(x, probs = c(0.25, 0.33, 0.66, 0.75)) {
 
 # import the data
 ```{r get data}
+todate <- format(Sys.time(), "%d_%b_%Y")
 dr_data <- vroom(file = "./ConectAMLmtt040924filt_temp.tsv") %>%
     dplyr::select(
         sample = IDconect,
@@ -136,10 +138,21 @@ quants <- dr_pd %>%
     dplyr::rename(qvalue = value) %>%
     pivot_wider(names_from = "quantile", values_from = qvalue, names_prefix = "q")
 
-dr_pd %>%
-    inner_join(quants) %>%
-    dplyr::select(-n, mmaz) %>%
-    vroom_write(here("table_score.csv"), del = ",")
+wb <- createWorkbook()
+openxlsx::addWorksheet(wb, "q_scores")
+openxlsx::writeDataTable(wb, "q_scores",
+    x = dr_pd %>%
+        inner_join(quants) %>%
+        dplyr::select(-n, mmaz),
+    withFilter = FALSE
+)
+saveWorkbook(wb, here(str_c("table_score_", todate, ".xlsx")), overwrite = TRUE)
+
+# dr_pd %>%
+#     inner_join(quants) %>%
+#     dplyr::select(-n, mmaz) %>%
+#     vroom_write(here("table_score.csv"), del = ",")
+
 
 # label_facet <- function(original_var, custom_name) {
 #     lev <- levels(as.factor(original_var))
@@ -148,7 +161,7 @@ dr_pd %>%
 #     return(lab)
 # }
 
-box_plot() <- ggplot(dr_pd, aes(drug, value)) +
+box_plot <- ggplot(dr_pd, aes(drug, value)) +
     geom_violin(scale = "count") +
     geom_boxplot(width = 0.1, outlier.size = 1, outlier.shape = 20) +
     geom_point(
@@ -163,7 +176,6 @@ box_plot() <- ggplot(dr_pd, aes(drug, value)) +
     facet_wrap("stat",
         ncol = 1, scales = "free",
     ) +
-    # stat_summary(fun = median.quartile, geom = "line") +
     theme_bw() +
     pub_theme_facet
 
