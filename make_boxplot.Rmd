@@ -2,7 +2,7 @@
 title: "make_boxplot_patients"
 author: 
 - "ConYel Konstantinos Geles"
-date: "Wed Sep 11  2024, Last Update: Wed Sep 11  2024 `r format(Sys.Date(), '%a %b %d %Y')`"
+date: "Wed Sep 11  2024, Last Update: Fri Sep 20  2024 `r format(Sys.Date(), '%a %b %d %Y')`"
 output:
   html_document:
     toc: yes
@@ -126,9 +126,9 @@ dr_pd <- dr_data %>%
         title_s_col = case_when(
             score == 1 ~ "darkgreen",
             score == 2 ~ "green",
-            score == 3 ~ "black",
-            score == 4 ~ "darkred",
-            score == 5 ~ "red",
+            score == 3 ~ "grey",
+            score == 4 ~ "red",
+            score == 5 ~ "darkred",
         )
     )
 
@@ -138,12 +138,21 @@ quants <- dr_pd %>%
     dplyr::rename(qvalue = value) %>%
     pivot_wider(names_from = "quantile", values_from = qvalue, names_prefix = "q")
 
+quants_w <- dr_pd %>%
+    dplyr::select(sample, drug, stat, score) %>%
+    arrange(sample, drug, stat) %>%
+    pivot_wider(id_cols = sample, values_from = score, names_from = c(drug, stat))
 wb <- createWorkbook()
 openxlsx::addWorksheet(wb, "q_scores")
 openxlsx::writeDataTable(wb, "q_scores",
     x = dr_pd %>%
         inner_join(quants) %>%
         dplyr::select(-n, mmaz),
+    withFilter = FALSE
+)
+openxlsx::addWorksheet(wb, "scoring")
+openxlsx::writeDataTable(wb, "scoring",
+    x = quants_w,
     withFilter = FALSE
 )
 saveWorkbook(wb, here(str_c("table_score_", todate, ".xlsx")), overwrite = TRUE)
@@ -188,11 +197,13 @@ ggsave(box_plot,
     height = 20,
     dpi = 300
 )
-box_plot_m <- map(unique(dr_data$sample), ~ ggplot(dr_pd, aes(drug, value)) +
+
+box_plot_m <- map(unique(dr_data$sample) %>%
+    set_names(), ~ ggplot(dr_pd, aes(drug, value)) +
     geom_violin(scale = "count") +
     geom_boxplot(width = 0.1, outlier.size = 1, outlier.shape = 20) +
     geom_point(
-        data = filter(dr_data, sample == ssample),
+        data = filter(dr_data, sample == .x),
         aes(drug, value),
         size = 4,
         shape = 8,
@@ -205,8 +216,16 @@ box_plot_m <- map(unique(dr_data$sample), ~ ggplot(dr_pd, aes(drug, value)) +
     theme_bw() +
     pub_theme_facet)
 
-pdf(file = here("violin_plots.pdf"), width = 16, height = 10)
-box_plot_m
-dev.off()
+
+map(
+    unique(dr_data$sample), ~ ggsave(box_plot_m[[.x]],
+        filename = here(str_glue("violin_{.x}.png")),
+        device = "png",
+        units = "in",
+        width = 10,
+        height = 20,
+        dpi = 300
+    )
+)
 ```
 
