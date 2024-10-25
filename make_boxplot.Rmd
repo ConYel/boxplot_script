@@ -100,7 +100,7 @@ dr_pd <- dr_data %>%
     # filter(stat == sstat) %>%
     filter(!is.na(value)) %>%
     add_count(drug, stat) %>%
-    group_by(stat) %>%
+    group_by(drug, stat) %>%
     mutate(
         mmaz = max(value),
         mmaz = case_when(
@@ -113,6 +113,7 @@ dr_pd <- dr_data %>%
     arrange(value) %>%
     mutate(
         percentile = chop_quantiles(value,
+            # raw = TRUE,
             left = TRUE,
             probs = c(sc1 = 0, sc2 = 0.25, sc3 = 0.33, sc4 = 0.66, sc5 = 0.75)
         ),
@@ -142,6 +143,7 @@ quants_w <- dr_pd %>%
     dplyr::select(sample, drug, stat, score) %>%
     arrange(sample, drug, stat) %>%
     pivot_wider(id_cols = sample, values_from = score, names_from = c(drug, stat))
+
 wb <- createWorkbook()
 openxlsx::addWorksheet(wb, "q_scores")
 openxlsx::writeDataTable(wb, "q_scores",
